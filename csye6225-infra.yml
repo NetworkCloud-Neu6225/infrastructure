@@ -1,0 +1,108 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Cloud Formation Template
+Parameters:
+  VpcParamCidrBlock:
+    Description: "CIDR block for VPC, Enter IP address range for VPC."
+    Type: String
+    Default: "10.0.0.0/16"
+  Subnet1ParamCidr:
+    Description: "Enter the IP address range for the mySubnet1 in AZ 1"
+    Type: String
+    Default: 10.0.0.10/24
+  Subnet2ParamCidr:
+    Description: "Enter the IP address range for the mySubnet2 in AZ 2"
+    Type: String
+    Default: 10.0.1.21/24
+  Subnet3ParamCidr:
+    Description: "Enter the IP address range for the mySubnet3 in AZ 3"
+    Type: String
+    Default: 10.0.2.8/24
+Resources:
+  # Create a VPC
+  myVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcParamCidrBlock
+      EnableDnsSupport: "true"
+      EnableDnsHostnames: "true"
+      InstanceTenancy: "default"
+      Tags:
+        - Key: AWSCloudFormation
+          Value: !Ref AWS::StackName
+  # Create Subnets
+  mySubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref myVPC
+      AvailabilityZone: !Select [0, !GetAZs ""] # AZ 1
+      CidrBlock: !Ref Subnet1ParamCidr
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: AWSCloudFormation
+          Value: !Ref AWS::StackName
+  mySubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref myVPC
+      AvailabilityZone: !Select [1, !GetAZs ""] # AZ 2
+      CidrBlock: !Ref Subnet2ParamCidr
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: AWSCloudFormation
+          Value: !Ref AWS::StackName
+  mySubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref myVPC
+      AvailabilityZone: !Select [2, !GetAZs ""] # AZ 3
+      CidrBlock: !Ref Subnet3ParamCidr
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: AWSCloudFormation
+          Value: !Ref AWS::StackName
+  # Create a InternetGateway
+  myInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: AWSCloudFormation
+          Value: !Ref AWS::StackName
+  # Attaching VPC to Internet Gateway
+  myVPCIGAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref myInternetGateway
+      VpcId: !Ref myVPC
+  # Create a Public Route Table
+  myPublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref myVPC
+      Tags:
+      - Key: AWSCloudFormation
+        Value: !Ref AWS::StackName
+  # Associate Route Table with subnets
+  myRouteTableSubnet1Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref myPublicRouteTable
+      SubnetId: !Ref mySubnet1
+  myRouteTableSubnet2Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref myPublicRouteTable
+      SubnetId: !Ref mySubnet2
+  myRouteTableSubnet3Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref myPublicRouteTable
+      SubnetId: !Ref mySubnet3
+  # Create a public route in the public route table with destination cidr and Internet Gateway
+  myPublicRoute:
+    DependsOn: myVPCIGAttachment
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref myPublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref myInternetGateway
+  
