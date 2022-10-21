@@ -17,6 +17,11 @@ Parameters:
     Description: "Enter the IP address range for the mySubnet3 in AZ 3"
     Type: String
     Default: 10.0.2.8/24
+  KeyPairName:
+    Type: "AWS::EC2::KeyPair::KeyName"
+    Default: aws-01-vaishali
+    Description: "The name of an existing Amazon EC2 key pair in this region to use to SSH into the Amazon EC2 instances"
+
 Resources:
   # Create a VPC
   myVPC:
@@ -79,8 +84,8 @@ Resources:
     Properties:
       VpcId: !Ref myVPC
       Tags:
-      - Key: AWSCloudFormation
-        Value: !Ref AWS::StackName
+        - Key: AWSCloudFormation
+          Value: !Ref AWS::StackName
   # Associate Route Table with subnets
   myRouteTableSubnet1Association:
     Type: AWS::EC2::SubnetRouteTableAssociation
@@ -105,4 +110,43 @@ Resources:
       RouteTableId: !Ref myPublicRouteTable
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref myInternetGateway
-  
+  # Create EC2 instance
+  myEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-01f08cc55022c173e
+      InstanceType: t2.micro
+      KeyName: !Ref KeyPairName
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeType: gp2
+            VolumeSize: "50"
+            DeleteOnTermination: "false"
+      SecurityGroupIds:
+        - !Ref mySecurityGroup
+      SubnetId: !Ref mySubnet1
+  # Create Security Group
+  mySecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: "application"
+      GroupDescription: "Allow HTTP/HTTPS and SSH inbound and outbound traffic"
+      VpcId: !Ref myVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          CidrIp: 0.0.0.0/0
