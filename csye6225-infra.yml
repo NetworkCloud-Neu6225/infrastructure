@@ -17,6 +17,9 @@ Parameters:
     Description: "Enter the IP address range for the mySubnet3 in AZ 3"
     Type: String
     Default: 10.0.2.8/24
+  AMIID:
+    Type: String
+    Description: "Id of AMI"
   KeyPairName:
     Type: "AWS::EC2::KeyPair::KeyName"
     Default: aws-01-vaishali
@@ -114,7 +117,7 @@ Resources:
   myEC2Instance:
     Type: AWS::EC2::Instance
     Properties:
-      ImageId: ami-01f08cc55022c173e
+      ImageId: !Ref AMIID
       InstanceType: t2.micro
       KeyName: !Ref KeyPairName
       BlockDeviceMappings:
