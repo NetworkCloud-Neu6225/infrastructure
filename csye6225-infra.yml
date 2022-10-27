@@ -17,14 +17,52 @@ Parameters:
     Description: "Enter the IP address range for the mySubnet3 in AZ 3"
     Type: String
     Default: 10.0.2.8/24
+  SubnetPrivate1Cidr:
+    Description: "Enter the IP address range for the private Subnet1 in AZ 1"
+    Type: String
+    Default: 10.0.4.1/24
+  SubnetPrivate2Cidr:
+    Description: "Enter the IP address range for the private Subnet2 in AZ 2"
+    Type: String
+    Default: 10.0.5.1/24
+  SubnetPrivate3Cidr:
+    Description: "Enter the IP address range for the private Subnet3 in AZ 3"
+    Type: String
+    Default: 10.0.6.1/24
   AMIID:
     Type: String
     Description: "Id of AMI"
+    Default: ""
   KeyPairName:
     Type: "AWS::EC2::KeyPair::KeyName"
     Default: aws-01-vaishali
     Description: "The name of an existing Amazon EC2 key pair in this region to use to SSH into the Amazon EC2 instances"
-
+  S3BucketName:
+    Type: String
+    Description: The name for the S3 bucket - Randomly generated and Unique
+    Default: "mys3bucketnew"
+    AllowedPattern: "^[a-z0-9]{5,40}$"
+    ConstraintDescription: 3-63 characters; must contain only lowercase letters or numbers
+  DBName:
+    Type: String
+    Description: RDS Database name
+    Default: csye6225
+  MasterUsername:
+    Type: String
+    Description: RDS database master user name
+    Default: csye6225
+  MasterUserPassword:
+    Type: String
+    Description: RDS database master user password
+    Default: Mysqlvjneu786
+  DBInstanceClass:
+    Type: String
+    Description: RDS database instance class
+    Default: db.t3.micro
+  DBInstanceIdentifier:
+    Default: csye6225
+    Description: My database instance
+    Type: String
 Resources:
   # Create a VPC
   myVPC:
@@ -37,7 +75,7 @@ Resources:
       Tags:
         - Key: AWSCloudFormation
           Value: !Ref AWS::StackName
-  # Create Subnets
+  # Create Public Subnets
   mySubnet1:
     Type: AWS::EC2::Subnet
     Properties:
@@ -65,6 +103,37 @@ Resources:
       AvailabilityZone: !Select [2, !GetAZs ""] # AZ 3
       CidrBlock: !Ref Subnet3ParamCidr
       MapPublicIpOnLaunch: true
+      Tags:
+        - Key: AWSCloudFormation
+          Value: !Ref AWS::StackName
+  # Create Private Subnet
+  myPrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref myVPC
+      AvailabilityZone: !Select [0, !GetAZs ""] # AZ 1
+      CidrBlock: !Ref SubnetPrivate1Cidr
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: AWSCloudFormation
+          Value: !Ref AWS::StackName
+  myPrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref myVPC
+      AvailabilityZone: !Select [1, !GetAZs ""] # AZ 2
+      CidrBlock: !Ref SubnetPrivate2Cidr
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: AWSCloudFormation
+          Value: !Ref AWS::StackName
+  myPrivateSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref myVPC
+      AvailabilityZone: !Select [2, !GetAZs ""] # AZ 3
+      CidrBlock: !Ref SubnetPrivate3Cidr
+      MapPublicIpOnLaunch: false
       Tags:
         - Key: AWSCloudFormation
           Value: !Ref AWS::StackName
@@ -113,24 +182,110 @@ Resources:
       RouteTableId: !Ref myPublicRouteTable
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref myInternetGateway
-  # Create EC2 instance
-  myEC2Instance:
-    Type: AWS::EC2::Instance
+  # Specify an Elastic IP (EIP) address for a NAT Gateway in AZ 1, Create a NAT Gateway in the public subnet for AZ 1,
+  # Create a private route table for AZ 1 and Associate the private route table with the Nat Gateway in AZ 1 and
+  # Associate the private route table with the private subnet in AZ 1
+  myNatGateway1EIP:
+    Type: AWS::EC2::EIP
     Properties:
-      ImageId: !Ref AMIID
-      InstanceType: t2.micro
-      KeyName: !Ref KeyPairName
-      BlockDeviceMappings:
-        - DeviceName: /dev/sda1
-          Ebs:
-            VolumeType: gp2
-            VolumeSize: "50"
-            DeleteOnTermination: "false"
-      SecurityGroupIds:
-        - !Ref mySecurityGroup
+      Domain: vpc
+  myNatGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt myNatGateway1EIP.AllocationId
       SubnetId: !Ref mySubnet1
-  # Create Security Group
-  mySecurityGroup:
+      Tags:
+        - Key: AWSCloudFormation
+          Value: !Ref AWS::StackName
+  myPrivateRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref myVPC
+      Tags:
+        - Key: AWSCloudFormation
+          Value: !Ref AWS::StackName
+  myNATGatewayRoute1:
+    Type: AWS::EC2::Route
+    DependsOn: myVPCIGAttachment
+    Properties:
+      RouteTableId: !Ref myPrivateRouteTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref myNatGateway1
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref myPrivateRouteTable1
+      SubnetId: !Ref myPrivateSubnet1
+  # Specify an Elastic IP (EIP) address for a NAT Gateway in AZ 2, Create a NAT Gateway in the public subnet for AZ 2,
+  # Create a private route table for AZ 2 and Associate the private route table with the Nat Gateway in AZ 2 and
+  # Associate the private route table with the private subnet in AZ 2
+  myNatGateway2EIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+  myNatGateway2:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt myNatGateway2EIP.AllocationId
+      SubnetId: !Ref mySubnet2
+      Tags:
+        - Key: AWSCloudFormation
+          Value: !Ref AWS::StackName
+  myPrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref myVPC
+      Tags:
+        - Key: AWSCloudFormation
+          Value: !Ref AWS::StackName
+  myNATGatewayRoute2:
+    Type: AWS::EC2::Route
+    DependsOn: myVPCIGAttachment
+    Properties:
+      RouteTableId: !Ref myPrivateRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref myNatGateway2
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref myPrivateRouteTable2
+      SubnetId: !Ref myPrivateSubnet2
+  # Specify an Elastic IP (EIP) address for a NAT Gateway in AZ 3, Create a NAT Gateway in the public subnet for AZ 3,
+  # Create a private route table for AZ 3 and Associate the private route table with the Nat Gateway in AZ 3 and
+  # Associate the private route table with the private subnet in AZ 3
+  myNatGateway3EIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+  myNatGateway3:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt myNatGateway3EIP.AllocationId
+      SubnetId: !Ref mySubnet3
+      Tags:
+        - Key: AWSCloudFormation
+          Value: !Ref AWS::StackName
+  myPrivateRouteTable3:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref myVPC
+      Tags:
+        - Key: AWSCloudFormation
+          Value: !Ref AWS::StackName
+  myNATGatewayRoute3:
+    Type: AWS::EC2::Route
+    DependsOn: myVPCIGAttachment
+    Properties:
+      RouteTableId: !Ref myPrivateRouteTable3
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref myNatGateway3
+  PrivateSubnet3RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref myPrivateRouteTable3
+      SubnetId: !Ref myPrivateSubnet3
+  # Create Security Group for application
+  myWebAppSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupName: "application"
@@ -153,3 +308,130 @@ Resources:
           FromPort: 3000
           ToPort: 3000
           CidrIp: 0.0.0.0/0
+  # Create EC2 instance
+  myEC2Instance:
+    Type: AWS::EC2::Instance
+    DependsOn:
+      - myRDSBBInstance
+    Properties:
+      ImageId: !Ref AMIID
+      InstanceType: t2.micro
+      KeyName: !Ref KeyPairName
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeType: gp2
+            VolumeSize: "50"
+            DeleteOnTermination: "true"
+            Encrypted: "true"
+      SecurityGroupIds:
+        - !Ref myWebAppSecurityGroup
+      SubnetId: !Ref mySubnet1
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          echo export USERNAME=${MasterUsername} >> /etc/profile
+          echo export PASSWORD=${MasterUserPassword} >> /etc/profile
+          echo export S3BUCKETNAME=${S3BucketName} >> /etc/profile
+          echo export HOSTNAME= !GetAtt myRDSBBInstance.Endpoint.Address >> /etc/profile
+  # Create S3 Bucket
+  MyS3Bucket:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: !Join
+        - "-"
+        - - !Ref S3BucketName
+          - !Ref "AWS::Region"
+  # Create RDS Parameter Group
+  myRDSParameterGroup:
+    Type: "AWS::RDS::DBParameterGroup"
+    Properties:
+      Description: Parameter group for the MYSQL RDS DB
+      Family: mysql8.0
+      Parameters:
+        sql_mode: IGNORE_SPACE
+        max_allowed_packet: 16777216
+        innodb_buffer_pool_size: '{DBInstanceClassMemory*3/4}'
+  # Create Subnet Group
+  myDBSubnetGroup:
+    Type: "AWS::RDS::DBSubnetGroup"
+    Properties:
+      DBSubnetGroupDescription: DB subnet group
+      SubnetIds:
+        - !Ref myPrivateSubnet1
+        - !Ref myPrivateSubnet2
+      Tags:
+        - Key: AWSCloudFormation
+          Value: !Ref AWS::StackName
+  # Create RDS instance
+  myRDSBBInstance:
+    Type: AWS::RDS::DBInstance
+    DependsOn:
+      - myDBSecurityGroup
+      - myDBSubnetGroup
+      - myRDSParameterGroup
+    Properties:
+      DBParameterGroupName: !Ref myRDSParameterGroup
+      VPCSecurityGroups:
+        - !Ref myDBSecurityGroup
+      AllocatedStorage: "5"
+      DBInstanceClass: !Ref DBInstanceClass
+      DBInstanceIdentifier: !Ref DBInstanceIdentifier
+      Engine: MySQL
+      MasterUsername: !Ref MasterUsername
+      MasterUserPassword: !Ref MasterUserPassword
+      DBName: !Ref DBName
+      PubliclyAccessible: No
+      MultiAZ: No
+      DBSubnetGroupName: !Ref myDBSubnetGroup
+  # Create Security group for database
+  myDBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: "database"
+      GroupDescription: "Allow mysql inbound traffic"
+      VpcId: !Ref myVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref myWebAppSecurityGroup
+  # Create instance profile
+  myInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref myEC2CSYE6225IAMRole
+  myEC2CSYE6225IAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: EC2-CSYE6225
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+  myWebAppS3Policy:
+    Type: AWS::IAM::Policy
+    DependsOn:
+      - myEC2Instance
+    Properties:
+      PolicyName: WebAppS3
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - "s3:GetObject"
+              - "s3:PutObject"
+              - "s3:ListMultipartUploadParts"
+              - "s3:AbortMultipartUpload"
+            Resource:
+              - arn:aws:s3:::S3BucketName
+              - arn:aws:s3:::S3BucketName/*
+      Roles:
+        - !Ref myEC2CSYE6225IAMRole
