@@ -352,10 +352,11 @@ Resources:
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
-          echo export USERNAME=${MasterUsername} >> /etc/profile
-          echo export PASSWORD=${MasterUserPassword} >> /etc/profile
-          echo export S3BUCKETNAME=${S3BucketName}-${AWS::Region} >> /etc/profile
-          echo export HOSTNAME=${myRDSBBInstance.Endpoint.Address} >> /etc/profile
+          echo USERNAME=${MasterUsername} >> /etc/profile
+          echo PASSWORD=${MasterUserPassword} >> /etc/profile
+          echo S3BUCKETNAME=${S3BucketName}-${AWS::Region} >> /etc/profile
+          echo HOSTNAME=${myRDSBBInstance.Endpoint.Address} >> /etc/profile
+          echo REGION=${AWS::Region} >> /etc/profile
           echo "Reload Demon"
           sudo systemctl daemon-reload
           echo "Start Systemd"
@@ -439,7 +440,7 @@ Resources:
               - "s3:ListMultipartUploadParts"
               - "s3:AbortMultipartUpload"
             Resource:
-              - arn:aws:s3:::S3BucketName
-              - arn:aws:s3:::S3BucketName/*
+              - arn:aws:s3:::${S3BucketName}-${AWS::Region}
+              - arn:aws:s3:::${S3BucketName}-${AWS::Region}/*
       Roles:
         - !Ref myEC2CSYE6225IAMRole
