@@ -308,6 +308,27 @@ Resources:
           FromPort: 3000
           ToPort: 3000
           CidrIp: 0.0.0.0/0
+  # Create RDS instance
+  myRDSBBInstance:
+    Type: AWS::RDS::DBInstance
+    DependsOn:
+      - myDBSecurityGroup
+      - myDBSubnetGroup
+      - myRDSParameterGroup
+    Properties:
+      DBParameterGroupName: !Ref myRDSParameterGroup
+      VPCSecurityGroups:
+        - !Ref myDBSecurityGroup
+      AllocatedStorage: "5"
+      DBInstanceClass: !Ref DBInstanceClass
+      DBInstanceIdentifier: !Ref DBInstanceIdentifier
+      Engine: MySQL
+      MasterUsername: !Ref MasterUsername
+      MasterUserPassword: !Ref MasterUserPassword
+      DBName: !Ref DBName
+      PubliclyAccessible: No
+      MultiAZ: No
+      DBSubnetGroupName: !Ref myDBSubnetGroup
   # Create EC2 instance
   myEC2Instance:
     Type: AWS::EC2::Instance
@@ -317,6 +338,7 @@ Resources:
       ImageId: !Ref AMIID
       InstanceType: t2.micro
       KeyName: !Ref KeyPairName
+      IamInstanceProfile: !Ref myInstanceProfile
       BlockDeviceMappings:
         - DeviceName: /dev/sda1
           Ebs:
@@ -332,8 +354,14 @@ Resources:
           #!/bin/bash
           echo export USERNAME=${MasterUsername} >> /etc/profile
           echo export PASSWORD=${MasterUserPassword} >> /etc/profile
-          echo export S3BUCKETNAME=${S3BucketName} >> /etc/profile
-          echo export HOSTNAME= !GetAtt myRDSBBInstance.Endpoint.Address >> /etc/profile
+          echo export S3BUCKETNAME=${S3BucketName}-${AWS::Region} >> /etc/profile
+          echo export HOSTNAME=${myRDSBBInstance.Endpoint.Address} >> /etc/profile
+          echo "Reload Demon"
+          sudo systemctl daemon-reload
+          echo "Start Systemd"
+          sudo systemctl enable index.service
+          sudo systemctl restart index.service
+          sudo systemctl start index.service      
   # Create S3 Bucket
   MyS3Bucket:
     Type: "AWS::S3::Bucket"
@@ -363,27 +391,6 @@ Resources:
       Tags:
         - Key: AWSCloudFormation
           Value: !Ref AWS::StackName
-  # Create RDS instance
-  myRDSBBInstance:
-    Type: AWS::RDS::DBInstance
-    DependsOn:
-      - myDBSecurityGroup
-      - myDBSubnetGroup
-      - myRDSParameterGroup
-    Properties:
-      DBParameterGroupName: !Ref myRDSParameterGroup
-      VPCSecurityGroups:
-        - !Ref myDBSecurityGroup
-      AllocatedStorage: "5"
-      DBInstanceClass: !Ref DBInstanceClass
-      DBInstanceIdentifier: !Ref DBInstanceIdentifier
-      Engine: MySQL
-      MasterUsername: !Ref MasterUsername
-      MasterUserPassword: !Ref MasterUserPassword
-      DBName: !Ref DBName
-      PubliclyAccessible: No
-      MultiAZ: No
-      DBSubnetGroupName: !Ref myDBSubnetGroup
   # Create Security group for database
   myDBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -428,6 +435,7 @@ Resources:
             Action:
               - "s3:GetObject"
               - "s3:PutObject"
+              - "s3:DeleteObject"
               - "s3:ListMultipartUploadParts"
               - "s3:AbortMultipartUpload"
             Resource:
