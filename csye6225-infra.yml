@@ -352,17 +352,18 @@ Resources:
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
-          echo USERNAME=${MasterUsername} >> /etc/profile
-          echo PASSWORD=${MasterUserPassword} >> /etc/profile
-          echo S3BUCKETNAME=${S3BucketName}-${AWS::Region} >> /etc/profile
-          echo HOSTNAME=${myRDSBBInstance.Endpoint.Address} >> /etc/profile
-          echo REGION=${AWS::Region} >> /etc/profile
+          echo USERNAME=${MasterUsername} >> /home/ubuntu/app.env
+          echo PASSWORD=${MasterUserPassword} >> /home/ubuntu/app.env
+          echo S3BUCKETNAME=${S3BucketName}-${AWS::Region} >> /home/ubuntu/app.env
+          echo HOSTNAME=${myRDSBBInstance.Endpoint.Address} >> /home/ubuntu/app.env
+          echo REGION=${AWS::Region} >> /home/ubuntu/app.env
           echo "Reload Demon"
           sudo systemctl daemon-reload
           echo "Start Systemd"
           sudo systemctl enable index.service
-          sudo systemctl restart index.service
-          sudo systemctl start index.service      
+          sudo systemctl start index.service 
+          sleep 20
+          sudo systemctl restart index.service   
   # Create S3 Bucket
   MyS3Bucket:
     Type: "AWS::S3::Bucket"
@@ -436,11 +437,12 @@ Resources:
             Action:
               - "s3:GetObject"
               - "s3:PutObject"
+              - "s3:PutObjectAcl"
               - "s3:DeleteObject"
               - "s3:ListMultipartUploadParts"
               - "s3:AbortMultipartUpload"
             Resource:
-              - arn:aws:s3:::${S3BucketName}-${AWS::Region}
-              - arn:aws:s3:::${S3BucketName}-${AWS::Region}/*
+              - !Sub arn:aws:s3:::${S3BucketName}-${AWS::Region}
+              - !Sub arn:aws:s3:::${S3BucketName}-${AWS::Region}/*
       Roles:
         - !Ref myEC2CSYE6225IAMRole
