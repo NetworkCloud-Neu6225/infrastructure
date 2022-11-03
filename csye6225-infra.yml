@@ -63,6 +63,14 @@ Parameters:
     Default: csye6225
     Description: My database instance
     Type: String
+  HostedZoneName:
+    Default: dev.vjeenwalcloudnet.me.
+    Description: The route53 HostedZoneName. 
+    Type: String
+  Subdomain:
+    Default: ""
+    Description: The subdomain of the DNS entry.
+    Type: String
 Resources:
   # Create a VPC
   myVPC:
@@ -308,7 +316,7 @@ Resources:
           FromPort: 3000
           ToPort: 3000
           CidrIp: 0.0.0.0/0
-  # Create RDS instance
+  #Create RDS instance
   myRDSBBInstance:
     Type: AWS::RDS::DBInstance
     DependsOn:
@@ -329,11 +337,11 @@ Resources:
       PubliclyAccessible: No
       MultiAZ: No
       DBSubnetGroupName: !Ref myDBSubnetGroup
-  # Create EC2 instance
+  #Create EC2 instance
   myEC2Instance:
     Type: AWS::EC2::Instance
-    DependsOn:
-      - myRDSBBInstance
+    # DependsOn:
+    #   - myRDSBBInstance
     Properties:
       ImageId: !Ref AMIID
       InstanceType: t2.micro
@@ -372,7 +380,27 @@ Resources:
         - "-"
         - - !Ref S3BucketName
           - !Ref "AWS::Region"
-  # Create RDS Parameter Group
+      AccessControl: Private
+      ForceDestroy: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+               SSEAtgorithm: 'aws:kms'
+               KMSMasterKey1D: KMS-KEY-ARN 
+      LifecycleConfiguration:
+        Rules:
+          - Id: downgrade
+            Status: Enabled
+            ExpirationInDays: 365
+            Transitions:
+              - TransitionInDays: 30
+                StorageClass: STANDARD-IA
+      PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true    
+  #Create RDS Parameter Group
   myRDSParameterGroup:
     Type: "AWS::RDS::DBParameterGroup"
     Properties:
@@ -382,7 +410,7 @@ Resources:
         sql_mode: IGNORE_SPACE
         max_allowed_packet: 16777216
         innodb_buffer_pool_size: '{DBInstanceClassMemory*3/4}'
-  # Create Subnet Group
+  #Create Subnet Group
   myDBSubnetGroup:
     Type: "AWS::RDS::DBSubnetGroup"
     Properties:
@@ -446,3 +474,13 @@ Resources:
               - !Sub arn:aws:s3:::${S3BucketName}-${AWS::Region}/*
       Roles:
         - !Ref myEC2CSYE6225IAMRole
+  DnsRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneName: !Ref 'HostedZoneName'
+      Comment: DNS name for my instance.
+      Name: !Ref 'HostedZoneName'
+      Type: A
+      TTL: '60'
+      ResourceRecords:
+      - !GetAtt myEC2Instance.PublicIp      
