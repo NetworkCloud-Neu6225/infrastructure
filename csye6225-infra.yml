@@ -65,7 +65,7 @@ Parameters:
     Type: String
   HostedZoneName:
     Default: dev.vjeenwalcloudnet.me.
-    Description: The route53 HostedZoneName. 
+    Description: The route53 HostedZoneName.
     Type: String
   Subdomain:
     Default: ""
@@ -365,13 +365,13 @@ Resources:
           echo S3BUCKETNAME=${S3BucketName}-${AWS::Region} >> /home/ubuntu/app.env
           echo HOSTNAME=${myRDSBBInstance.Endpoint.Address} >> /home/ubuntu/app.env
           echo REGION=${AWS::Region} >> /home/ubuntu/app.env
-          echo "Reload Demon"
-          sudo systemctl daemon-reload
           echo "Start Systemd"
           sudo systemctl enable index.service
           sudo systemctl start index.service 
           sleep 20
-          sudo systemctl restart index.service   
+          echo "Reload Demon"
+          sudo systemctl daemon-reload  
+          sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-ports 3000
   # Create S3 Bucket
   MyS3Bucket:
     Type: "AWS::S3::Bucket"
@@ -381,25 +381,10 @@ Resources:
         - - !Ref S3BucketName
           - !Ref "AWS::Region"
       AccessControl: Private
-      ForceDestroy: true
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
-               SSEAtgorithm: 'aws:kms'
-               KMSMasterKey1D: KMS-KEY-ARN 
-      LifecycleConfiguration:
-        Rules:
-          - Id: downgrade
-            Status: Enabled
-            ExpirationInDays: 365
-            Transitions:
-              - TransitionInDays: 30
-                StorageClass: STANDARD-IA
-      PublicAccessBlockConfiguration:
-          BlockPublicAcls: true
-          BlockPublicPolicy: true
-          IgnorePublicAcls: true
-          RestrictPublicBuckets: true    
+              SSEAlgorithm: "AES256"
   #Create RDS Parameter Group
   myRDSParameterGroup:
     Type: "AWS::RDS::DBParameterGroup"
@@ -409,7 +394,7 @@ Resources:
       Parameters:
         sql_mode: IGNORE_SPACE
         max_allowed_packet: 16777216
-        innodb_buffer_pool_size: '{DBInstanceClassMemory*3/4}'
+        innodb_buffer_pool_size: "{DBInstanceClassMemory*3/4}"
   #Create Subnet Group
   myDBSubnetGroup:
     Type: "AWS::RDS::DBSubnetGroup"
@@ -477,10 +462,10 @@ Resources:
   DnsRecord:
     Type: AWS::Route53::RecordSet
     Properties:
-      HostedZoneName: !Ref 'HostedZoneName'
+      HostedZoneName: !Ref "HostedZoneName"
       Comment: DNS name for my instance.
-      Name: !Ref 'HostedZoneName'
+      Name: !Ref "HostedZoneName"
       Type: A
-      TTL: '60'
+      TTL: "60"
       ResourceRecords:
-      - !GetAtt myEC2Instance.PublicIp      
+        - !GetAtt myEC2Instance.PublicIp
