@@ -375,6 +375,7 @@ Resources:
   # Create S3 Bucket
   MyS3Bucket:
     Type: "AWS::S3::Bucket"
+    DeletionPolicy: Delete
     Properties:
       BucketName: !Join
         - "-"
@@ -385,6 +386,19 @@ Resources:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: "AES256"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      # LifecycleConfiguration:
+      #   Rules:
+      #     - Id: Move to Standard IA
+      #       Status: Enabled
+      #       ExpirationInDays: 365
+      #       Transitions:
+      #         - TransitionInDays: 30
+      #           StorageClass: STANDARD-IA
   #Create RDS Parameter Group
   myRDSParameterGroup:
     Type: "AWS::RDS::DBParameterGroup"
@@ -459,6 +473,24 @@ Resources:
               - !Sub arn:aws:s3:::${S3BucketName}-${AWS::Region}/*
       Roles:
         - !Ref myEC2CSYE6225IAMRole
+  myCloudWatchAgentServerPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: CloudWatchAgentServerPolicy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'cloudwatch:PutMetricData'
+              - 'logs:PutLogEvents'
+              - 'logs:DescribeLogStreams'
+              - 'logs:DescribeLogGroups'
+              - 'logs:CreateLogStream'
+              - 'logs:CreateLogGroup'
+            Resource: "*"
+      Roles:
+        - Ref: myEC2CSYE6225IAMRole    
   DnsRecord:
     Type: AWS::Route53::RecordSet
     Properties:
