@@ -624,14 +624,14 @@ Resources:
     Properties:
       AttributeDefinitions:
         - 
-          AttributeName: "email"
+          AttributeName: "Email"
           AttributeType: "S"
         - 
           AttributeName: "Token"
           AttributeType: "S"
       KeySchema:
         - 
-          AttributeName: "email"
+          AttributeName: "Email"
           KeyType: "HASH"
         - 
           AttributeName: "Token"
