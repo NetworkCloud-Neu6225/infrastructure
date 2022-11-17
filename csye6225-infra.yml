@@ -340,8 +340,8 @@ Resources:
   #Create EC2 instance
   myEC2Instance:
     Type: AWS::EC2::Instance
-    # DependsOn:
-    #   - myRDSBBInstance
+    DependsOn:
+      - myRDSBBInstance
     Properties:
       ImageId: !Ref AMIID
       InstanceType: t2.micro
@@ -469,15 +469,15 @@ Resources:
         Statement:
           - Effect: Allow
             Action:
-              - 'cloudwatch:PutMetricData'
-              - 'logs:PutLogEvents'
-              - 'logs:DescribeLogStreams'
-              - 'logs:DescribeLogGroups'
-              - 'logs:CreateLogStream'
-              - 'logs:CreateLogGroup'
+              - "cloudwatch:PutMetricData"
+              - "logs:PutLogEvents"
+              - "logs:DescribeLogStreams"
+              - "logs:DescribeLogGroups"
+              - "logs:CreateLogStream"
+              - "logs:CreateLogGroup"
             Resource: "*"
       Roles:
-        - Ref: myEC2CSYE6225IAMRole    
+        - Ref: myEC2CSYE6225IAMRole
   DnsRecord:
     Type: AWS::Route53::RecordSet
     Properties:
@@ -488,3 +488,162 @@ Resources:
       TTL: "60"
       ResourceRecords:
         - !GetAtt myEC2Instance.PublicIp
+  mySNSTopic:
+    Type: AWS::SNS::Topic
+    DependsOn: myLambdaFunction
+    Properties:
+      DisplayName: SNSTopicLambda
+      TopicName: SNSTopicLambda
+      Subscription:
+        - Endpoint: !GetAtt myLambdaFunction.Arn
+          Protocol: lambda
+  LambdaInvokePermission:
+    DependsOn: myLambdaFunction
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceArn:
+        Ref: mySNSTopic
+      FunctionName: !Ref myLambdaFunction
+  mySNSTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: "*"
+            Action:
+              - SNS:Publish
+              - SNS:GetTopicAttributes
+              - SNS:SetTopicAttributes
+              - SNS:AddPermission
+              - SNS:RemovePermission
+              - SNS:DeleteTopic
+              - SNS:Subscribe
+              - SNS:ListSubscriptionsByTopic
+              - SNS:Publish
+              - SNS:Receive
+            Resource:
+              - !Ref mySNSTopic
+            Condition:
+              StringEquals:
+                AWS:SourceOwner: !Ref AWS::AccountId
+      Topics:
+        - !Ref mySNSTopic
+  myLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName:
+        Fn::Sub: lambda-role
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+        Version: 2012-10-17
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSLambdaExecute
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+        - arn:aws:iam::aws:policy/AmazonSESFullAccess
+      Path: /
+  myLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: lambda-function-${AWS::Region}
+      Description: LambdaFunctioni of nodejs16.x.
+      PackageType: Zip
+      Runtime: nodejs16.x
+      Code:
+        ZipFile: |
+          const aws = require("aws-sdk");
+          exports.handler = async function (event, context) {
+          let SnsMessage = event.Records[0].Sns.Message;
+          let jsonParse = JSON.parse(SnsMessage);
+          let Email = jsonParse.username;
+
+          const body = `<!DOCTYPE html>
+          <html>
+          <head>
+          </head>
+          <body>
+          <p>Hi, ${Email}</p>
+          <p>Email verification Link</br>
+          <b>Please Click on the link and verify your email</b></br>
+             Find your link below:</p>
+          <p><a>Email</a></p>
+          </body></html>
+          </body>
+          </html>`;
+
+          const ses = new aws.SES();
+          const params = {
+          Destination: {
+            ToAddresses: [Email],
+          },
+          Message: {
+          Body: {
+          Html: { Data: body },
+          },
+          Subject: {
+          Data: "Email",
+          },
+          },
+          Source: "prod.vjeenwalcloudnet.me",
+          };
+
+          try {
+          await ses.sendEmail(params).promise();
+          return {
+          statusCode: 200,
+          body: "Email sent!",
+          };
+          } catch (e) {
+          console.error(e);
+          return {
+          statusCode: 400,
+          body: "Sending failed",
+          };
+          }
+          };
+      Handler: index.handler
+      MemorySize: 128
+      Timeout: 10
+      Role: !GetAtt myLambdaRole.Arn
+      Environment:
+        Variables:
+          ENV:
+            Fn::Sub: ${AWS::Region}
+  DynamodbTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - 
+          AttributeName: "email"
+          AttributeType: "S"
+        - 
+          AttributeName: "Token"
+          AttributeType: "S"
+      KeySchema:
+        - 
+          AttributeName: "email"
+          KeyType: "HASH"
+        - 
+          AttributeName: "Token"
+          KeyType: "RANGE"
+      BillingMode: PROVISIONED    
+      ProvisionedThroughput: 
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      TableName: dynamodbTable
+      TimeToLiveSpecification:
+        AttributeName: TimeToLive
+        Enabled: true
+      Tags:
+        - Key: AWSCloudFormation
+          Value: !Ref AWS::StackName
