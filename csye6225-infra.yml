@@ -437,6 +437,10 @@ Resources:
             Principal:
               Service: ec2.amazonaws.com
             Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSLambdaExecute
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+        - arn:aws:iam::aws:policy/AmazonSESFullAccess      
       Path: /
   myWebAppS3Policy:
     Type: AWS::IAM::Policy
@@ -562,55 +566,81 @@ Resources:
       Code:
         ZipFile: |
           const aws = require("aws-sdk");
+          var dynamoDB = new aws.DynamoDB.DocumentClient({
+          region: "us-east-1"
+          });
+
           exports.handler = async function (event, context) {
           let SnsMessage = event.Records[0].Sns.Message;
           let jsonParse = JSON.parse(SnsMessage);
-          let Email = jsonParse.username;
+          let email = jsonParse.username;
+ 
+          let token = jsonParse.token;
+          let currentTime = new Date().getTime();
+          let validTime = 5 * 60 * 1000;
+          let timeToLive = currentTime + validTime;
 
+          var table = {
+               TableName : "dynamodbTable",
+               Item:{
+                    "Email" : email,
+                    "Token" : token,
+                    "TimeToLive" : timeToLive
+                    }
+            }
+  
+          dynamoDB.put(table, function(err, data) {
+               if (err) {
+                     console.log(err, err.stack);
+                }
+               else {
+                     console.log(data);
+                }
+          });
+  
           const body = `<!DOCTYPE html>
           <html>
           <head>
           </head>
           <body>
-          <p>Hi, ${Email}</p>
+          <p>Hi, ${email}</p>
           <p>Email verification Link</br>
-          <b>Please Click on the link and verify your email</b></br>
-             Find your link below:</p>
-          <p><a>Email</a></p>
+          <b>You registered an account, before being able to use your account you need to verify that this is your email address by clicking below link</p>
+          <p><a>http://prod.vjeenwalcloudnet.me/v1/verifyUserEmail?email=${email}&token=${token}</a></p>
           </body></html>
           </body>
           </html>`;
 
           const ses = new aws.SES();
           const params = {
-          Destination: {
-            ToAddresses: [Email],
-          },
-          Message: {
-          Body: {
-          Html: { Data: body },
-          },
-          Subject: {
-          Data: "Email",
-          },
-          },
-          Source: "prod.vjeenwalcloudnet.me",
-          };
+                   Destination: {
+                      ToAddresses: [email],
+                  },
+                      Message: {
+                      Body: {
+                      Html: { Data: body },
+                  },
+                      Subject: {
+                      Data: "Email",
+                  },
+           },
+           Source: "contact@prod.vjeenwalcloudnet.me",
+           };
 
-          try {
-          await ses.sendEmail(params).promise();
-          return {
-          statusCode: 200,
-          body: "Email sent!",
-          };
-          } catch (e) {
-          console.error(e);
-          return {
-          statusCode: 400,
-          body: "Sending failed",
-          };
-          }
-          };
+           try {
+                await ses.sendEmail(params).promise();
+                return {
+                        statusCode: 200,
+                        body: "Email sent!",
+                      };
+                } catch (e) {
+                         console.error(e);
+                return {
+                         statusCode: 400,
+                         body: "Sending failed",
+                };
+                }
+              };
       Handler: index.handler
       MemorySize: 128
       Timeout: 10
