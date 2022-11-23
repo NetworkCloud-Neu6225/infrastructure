@@ -477,15 +477,16 @@ Resources:
       Roles:
         - Ref: myEC2CSYE6225IAMRole
   DnsRecord:
-    Type: AWS::Route53::RecordSet
+    Type: AWS::Route53::RecordSetGroup
     Properties:
-      HostedZoneName: !Ref "HostedZoneName"
-      Comment: DNS name for my instance.
-      Name: !Ref "HostedZoneName"
-      Type: A
-      TTL: "60"
-      ResourceRecords:
-        - !GetAtt myEC2Instance.PublicIp
+      HostedZoneName: !Ref HostedZoneName
+      Comment:  Zone alias for load balancer.
+      RecordSets:
+      - Name: !Ref HostedZoneName
+        Type: A
+        AliasTarget:
+          HostedZoneId: !GetAtt 'myLoadBalancer.CanonicalHostedZoneID'
+          DNSName: !GetAtt 'myLoadBalancer.HostedZoneName'
   mySNSTopic:
     Type: AWS::SNS::Topic
     DependsOn: myLambdaFunction
