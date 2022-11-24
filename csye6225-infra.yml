@@ -316,6 +316,7 @@ Resources:
       - myDBSecurityGroup
       - myDBSubnetGroup
       - myRDSParameterGroup
+      - myRDSInstanceKmsKey
     Properties:
       DBParameterGroupName: !Ref myRDSParameterGroup
       VPCSecurityGroups:
@@ -330,6 +331,7 @@ Resources:
       PubliclyAccessible: No
       MultiAZ: No
       DBSubnetGroupName: !Ref myDBSubnetGroup
+      KmsKeyId: !Ref myRDSInstanceKmsKey    
   #Create EC2 instance
   myEC2Instance:
     Type: AWS::EC2::Instance
@@ -419,6 +421,7 @@ Resources:
       Path: /
       Roles:
         - !Ref myEC2CSYE6225IAMRole
+  # Create EC2 IAM Role      
   myEC2CSYE6225IAMRole:
     Type: AWS::IAM::Role
     Properties:
@@ -436,6 +439,7 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonSESFullAccess
         - arn:aws:iam::aws:policy/AmazonSNSFullAccess      
       Path: /
+  # Create S3 Policy    
   myWebAppS3Policy:
     Type: AWS::IAM::Policy
     DependsOn:
@@ -458,6 +462,7 @@ Resources:
               - !Sub arn:aws:s3:::${S3BucketName}-${AWS::Region}/*
       Roles:
         - !Ref myEC2CSYE6225IAMRole
+  # Create cloud watch agent policy      
   myCloudWatchAgentServerPolicy:
     Type: AWS::IAM::Policy
     Properties:
@@ -476,6 +481,7 @@ Resources:
             Resource: "*"
       Roles:
         - Ref: myEC2CSYE6225IAMRole
+  # Create DNS Record      
   DnsRecord:
     Type: AWS::Route53::RecordSetGroup
     Properties:
@@ -487,6 +493,7 @@ Resources:
         AliasTarget:
           HostedZoneId: !GetAtt 'myLoadBalancer.CanonicalHostedZoneID'
           DNSName: !GetAtt 'myLoadBalancer.HostedZoneName'
+  # Create SNS Topic
   mySNSTopic:
     Type: AWS::SNS::Topic
     DependsOn: myLambdaFunction
@@ -496,15 +503,6 @@ Resources:
       Subscription:
         - Endpoint: !GetAtt myLambdaFunction.Arn
           Protocol: lambda
-  LambdaInvokePermission:
-    DependsOn: myLambdaFunction
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      Principal: sns.amazonaws.com
-      SourceArn:
-        Ref: mySNSTopic
-      FunctionName: !Ref myLambdaFunction
   mySNSTopicPolicy:
     Type: AWS::SNS::TopicPolicy
     Properties:
@@ -531,6 +529,16 @@ Resources:
                 AWS:SourceOwner: !Ref AWS::AccountId
       Topics:
         - !Ref mySNSTopic
+  # Create Lambda Function, Role, Policy and Permissions    
+  LambdaInvokePermission:
+    DependsOn: myLambdaFunction
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceArn:
+        Ref: mySNSTopic
+      FunctionName: !Ref myLambdaFunction      
   myLambdaRole:
     Type: AWS::IAM::Role
     Properties:
@@ -644,6 +652,7 @@ Resources:
         Variables:
           ENV:
             Fn::Sub: ${AWS::Region}
+  # Create Dynamodb Table         
   DynamodbTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -672,6 +681,7 @@ Resources:
       Tags:
         - Key: AWSCloudFormation
           Value: !Ref AWS::StackName
+  # Create Load balancer security group       
   myLBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -699,6 +709,8 @@ Resources:
             VolumeSize: 20
             VolumeType: "gp3"
             DeleteOnTermination: true
+            Encrypted: true
+            KmsKeyId: !Ref myEBSVolumeKmsKey
         ImageId: !Ref AMIID
         InstanceType: t2.micro
         IamInstanceProfile: !Ref myInstanceProfile
@@ -847,5 +859,73 @@ Resources:
           TargetGroupArn: !Ref myLBTargetGroup
       LoadBalancerArn: !Ref myLoadBalancer
       Port: 443
-      Protocol: HTTP         
+      Protocol: HTTP  
+  #Create KMS Key for EBS Volume     
+  myEBSVolumeKmsKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: !Sub KMS Key for EBS
+      KeyPolicy:
+        Version: 2012-10-17
+        Id: "kms-key-for-ebs"      
+        Statement:
+          - Sid: "Allow IAM User permission for EBS"
+            Effect: Allow
+            Principal:
+              AWS: !Join 
+                - ''
+                - - 'arn:aws:iam::'
+                  - !Ref 'AWS::AccountId'
+                  - ':root'
+            Action:
+              - "kms:*"
+            Resource: "*"
+          - Sid: "Add service role"
+            Effect: Allow
+            Principal:
+              AWS: !Join 
+                - ''
+                - - 'arn:aws:iam::'
+                  - !Ref 'AWS::AccountId'
+                  - ':role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling'
+            Action:
+              - "kms:*"
+            Resource: "*"  
+            Condition:
+              Bool: 
+                kms:GrantIsForAWSResource: true   
+  #Create KMS Key for RDS Instance  
+  myRDSInstanceKmsKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: !Sub KMS Key for RDS
+      KeyPolicy:
+        Version: 2012-10-17
+        Id: "kms-key-for-rds"      
+        Statement:
+          - Sid: "Allow IAM User permission for RDS Instance"
+            Effect: Allow
+            Principal:
+              AWS: !Join 
+                - ''
+                - - 'arn:aws:iam::'
+                  - !Ref 'AWS::AccountId'
+                  - ':root'
+            Action:
+              - "kms:*"
+            Resource: "*"
+          - Sid: "Add service role"
+            Effect: Allow
+            Principal:
+              AWS: !Join 
+                - ''
+                - - 'arn:aws:iam::'
+                  - !Ref 'AWS::AccountId'
+                  - ':role/aws-service-role/rds.amazonaws.com/AWSServiceRoleForRDS'
+            Action:
+              - "kms:*"
+            Resource: "*"              
+   
+                     
+      
       
