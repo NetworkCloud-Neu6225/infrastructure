@@ -307,7 +307,6 @@ Resources:
         - IpProtocol: tcp
           FromPort: 3000
           ToPort: 3000
-          CidrIp: 0.0.0.0/0
           SourceSecurityGroupId: !Ref myLBSecurityGroup
   #Create RDS instance
   myRDSBBInstance:
@@ -331,7 +330,8 @@ Resources:
       PubliclyAccessible: No
       MultiAZ: No
       DBSubnetGroupName: !Ref myDBSubnetGroup
-      KmsKeyId: !Ref myRDSInstanceKmsKey    
+      StorageEncrypted: true
+      KmsKeyId: !Ref myRDSInstanceKmsKey
   #Create EC2 instance
   myEC2Instance:
     Type: AWS::EC2::Instance
@@ -421,7 +421,7 @@ Resources:
       Path: /
       Roles:
         - !Ref myEC2CSYE6225IAMRole
-  # Create EC2 IAM Role      
+  # Create EC2 IAM Role
   myEC2CSYE6225IAMRole:
     Type: AWS::IAM::Role
     Properties:
@@ -437,9 +437,9 @@ Resources:
         - arn:aws:iam::aws:policy/AWSLambdaExecute
         - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
         - arn:aws:iam::aws:policy/AmazonSESFullAccess
-        - arn:aws:iam::aws:policy/AmazonSNSFullAccess      
+        - arn:aws:iam::aws:policy/AmazonSNSFullAccess
       Path: /
-  # Create S3 Policy    
+  # Create S3 Policy
   myWebAppS3Policy:
     Type: AWS::IAM::Policy
     DependsOn:
@@ -462,7 +462,7 @@ Resources:
               - !Sub arn:aws:s3:::${S3BucketName}-${AWS::Region}/*
       Roles:
         - !Ref myEC2CSYE6225IAMRole
-  # Create cloud watch agent policy      
+  # Create cloud watch agent policy
   myCloudWatchAgentServerPolicy:
     Type: AWS::IAM::Policy
     Properties:
@@ -481,18 +481,18 @@ Resources:
             Resource: "*"
       Roles:
         - Ref: myEC2CSYE6225IAMRole
-  # Create DNS Record      
+  # Create DNS Record
   DnsRecord:
     Type: AWS::Route53::RecordSetGroup
     Properties:
       HostedZoneName: !Ref HostedZoneName
-      Comment:  Zone alias for load balancer.
+      Comment: Zone alias for load balancer.
       RecordSets:
-      - Name: !Ref HostedZoneName
-        Type: A
-        AliasTarget:
-          HostedZoneId: !GetAtt 'myLoadBalancer.CanonicalHostedZoneID'
-          DNSName: !GetAtt 'myLoadBalancer.HostedZoneName'
+        - Name: !Ref HostedZoneName
+          Type: A
+          AliasTarget:
+            HostedZoneId: !GetAtt "myLoadBalancer.CanonicalHostedZoneID"
+            DNSName: !GetAtt "myLoadBalancer.DNSName"
   # Create SNS Topic
   mySNSTopic:
     Type: AWS::SNS::Topic
@@ -529,7 +529,7 @@ Resources:
                 AWS:SourceOwner: !Ref AWS::AccountId
       Topics:
         - !Ref mySNSTopic
-  # Create Lambda Function, Role, Policy and Permissions    
+  # Create Lambda Function, Role, Policy and Permissions
   LambdaInvokePermission:
     DependsOn: myLambdaFunction
     Type: AWS::Lambda::Permission
@@ -538,7 +538,7 @@ Resources:
       Principal: sns.amazonaws.com
       SourceArn:
         Ref: mySNSTopic
-      FunctionName: !Ref myLambdaFunction      
+      FunctionName: !Ref myLambdaFunction
   myLambdaRole:
     Type: AWS::IAM::Role
     Properties:
@@ -577,7 +577,7 @@ Resources:
           let SnsMessage = event.Records[0].Sns.Message;
           let jsonParse = JSON.parse(SnsMessage);
           let email = jsonParse.username;
- 
+
           let token = jsonParse.token;
           let currentTime = new Date().getTime();
           let validTime = 5 * 60 * 1000;
@@ -591,7 +591,7 @@ Resources:
                     "TimeToLive" : timeToLive
                     }
             }
-  
+
           dynamoDB.put(table, function(err, data) {
                if (err) {
                      console.log(err, err.stack);
@@ -600,7 +600,7 @@ Resources:
                      console.log(data);
                 }
           });
-  
+
           const body = `<!DOCTYPE html>
           <html>
           <head>
@@ -652,26 +652,22 @@ Resources:
         Variables:
           ENV:
             Fn::Sub: ${AWS::Region}
-  # Create Dynamodb Table         
+  # Create Dynamodb Table
   DynamodbTable:
     Type: AWS::DynamoDB::Table
     Properties:
       AttributeDefinitions:
-        - 
-          AttributeName: "Email"
+        - AttributeName: "Email"
           AttributeType: "S"
-        - 
-          AttributeName: "Token"
+        - AttributeName: "Token"
           AttributeType: "S"
       KeySchema:
-        - 
-          AttributeName: "Email"
+        - AttributeName: "Email"
           KeyType: "HASH"
-        - 
-          AttributeName: "Token"
+        - AttributeName: "Token"
           KeyType: "RANGE"
-      BillingMode: PROVISIONED    
-      ProvisionedThroughput: 
+      BillingMode: PROVISIONED
+      ProvisionedThroughput:
         ReadCapacityUnits: 1
         WriteCapacityUnits: 1
       TableName: dynamodbTable
@@ -681,15 +677,14 @@ Resources:
       Tags:
         - Key: AWSCloudFormation
           Value: !Ref AWS::StackName
-  # Create Load balancer security group       
+  # Create Load balancer security group
   myLBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-        GroupDescription: "load balancer security group"
-        GroupName: "load balancer"
-        VpcId:
-          Ref: myVPC
-        SecurityGroupIngress:
+      GroupDescription: "load balancer security group"
+      GroupName: "load balancer"
+      VpcId: !Ref myVPC
+      SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
@@ -701,37 +696,41 @@ Resources:
   myLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties:
-      LaunchTemplateName: !Sub '${AWS::StackName}-launch-template'
+      LaunchTemplateName: !Sub "${AWS::StackName}-launch-template"
       LaunchTemplateData:
         BlockDeviceMappings:
-        - DeviceName: /dev/sda1
-          Ebs:
-            VolumeSize: 20
-            VolumeType: "gp3"
-            DeleteOnTermination: true
-            Encrypted: true
-            KmsKeyId: !Ref myEBSVolumeKmsKey
+          - DeviceName: /dev/sda1
+            Ebs:
+              VolumeSize: 20
+              VolumeType: "gp3"
+              DeleteOnTermination: true
+              Encrypted: true
+              # KmsKeyId: !Ref myEBSVolumeKmsKey
         ImageId: !Ref AMIID
         InstanceType: t2.micro
-        IamInstanceProfile: !Ref myInstanceProfile
+        IamInstanceProfile:
+          Arn:
+            Fn::GetAtt:
+              - myInstanceProfile
+              - Arn
         KeyName: !Ref KeyPairName
         SecurityGroupIds:
-        - !Ref myWebAppSecurityGroup
+          - !Ref myWebAppSecurityGroup
         UserData:
-        Fn::Base64: !Sub |
-          #!/bin/bash
-          echo USERNAME=${MasterUsername} >> /home/ubuntu/app.env
-          echo PASSWORD=${MasterUserPassword} >> /home/ubuntu/app.env
-          echo S3BUCKETNAME=${S3BucketName}-${AWS::Region} >> /home/ubuntu/app.env
-          echo HOSTNAME=${myRDSBBInstance.Endpoint.Address} >> /home/ubuntu/app.env
-          echo REGION=${AWS::Region} >> /home/ubuntu/app.env
-          echo "Start Systemd"
-          sudo systemctl enable index.service
-          sudo systemctl start index.service 
-          sleep 20
-          echo "Reload Demon"
-          sudo systemctl daemon-reload  
-          sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-ports 3000
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            echo USERNAME=${MasterUsername} >> /home/ubuntu/app.env
+            echo PASSWORD=${MasterUserPassword} >> /home/ubuntu/app.env
+            echo S3BUCKETNAME=${S3BucketName}-${AWS::Region} >> /home/ubuntu/app.env
+            echo HOSTNAME=${myRDSBBInstance.Endpoint.Address} >> /home/ubuntu/app.env
+            echo REGION=${AWS::Region} >> /home/ubuntu/app.env
+            echo "Start Systemd"
+            sudo systemctl enable index.service
+            sudo systemctl start index.service 
+            sleep 20
+            echo "Reload Demon"
+            sudo systemctl daemon-reload  
+            sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-ports 3000
   myAutoScalingGroupWebApp:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
@@ -740,15 +739,15 @@ Resources:
         - us-east-1a
         - us-east-1b
         - us-east-1c
-      Cooldown: '60'
-      DesiredCapacity: '1'
+      Cooldown: "60"
+      DesiredCapacity: "1"
       HealthCheckGracePeriod: 90
       HealthCheckType: EC2
       LaunchTemplate:
         LaunchTemplateId: !Ref myLaunchTemplate
         Version: !GetAtt myLaunchTemplate.LatestVersionNumber
-      MaxSize: '3'
-      MinSize: '1'
+      MaxSize: "3"
+      MinSize: "1"
       Tags:
         - Key: Application
           Value: WebApp
@@ -768,21 +767,21 @@ Resources:
       AdjustmentType: ChangeInCapacity
       AutoScalingGroupName: !Ref myAutoScalingGroupWebApp
       Cooldown: 60
-      ScalingAdjustment: 1     
+      ScalingAdjustment: 1
   myCPUAlarmHigh:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      EvaluationPeriods: '1'
+      EvaluationPeriods: "1"
       Statistic: Average
-      Threshold: '5'
+      Threshold: "5"
       AlarmDescription: Scale-up if CPU > 5%
-      Period: '300'
+      Period: "300"
       AlarmActions:
-      - !Ref myScaleUpPolicy
+        - !Ref myScaleUpPolicy
       Namespace: AWS/EC2
       Dimensions:
-      - Name: AutoScalingGroupName
-        Value: !Ref myAutoScalingGroupWebApp
+        - Name: AutoScalingGroupName
+          Value: !Ref myAutoScalingGroupWebApp
       ComparisonOperator: GreaterThanThreshold
       MetricName: CPUUtilization
   myScaleDownPolicy:
@@ -795,26 +794,26 @@ Resources:
   myCPUAlarmLow:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      EvaluationPeriods: '1'
+      EvaluationPeriods: "1"
       Statistic: Average
-      Threshold: '3'
+      Threshold: "3"
       AlarmDescription: Scale-down if CPU < 3%
-      Period: '300'
+      Period: "300"
       AlarmActions:
-      - !Ref myScaleDownPolicy
+        - !Ref myScaleDownPolicy
       Namespace: AWS/EC2
       Dimensions:
-      - Name: AutoScalingGroupName
-        Value: !Ref myAutoScalingGroupWebApp
+        - Name: AutoScalingGroupName
+          Value: !Ref myAutoScalingGroupWebApp
       ComparisonOperator: LessThanThreshold
-      MetricName: CPUUtilization 
+      MetricName: CPUUtilization
   myLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
       IpAddressType: ipv4
       LoadBalancerAttributes:
         - Key: idle_timeout.timeout_seconds
-          Value: '60'
+          Value: "60"
       Name: !Sub ${AWS::StackName}-load-balancer
       Scheme: internet-facing
       SecurityGroups:
@@ -828,26 +827,26 @@ Resources:
           Value: WebApp
         - Key: Name
           Value: !Sub ${AWS::StackName}-load-balancer
-      Type: application  
+      Type: application
   myLBTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       HealthCheckIntervalSeconds: 90
-      HealthCheckPath: '/'
-      HealthCheckPort: '3000'
-      HealthCheckProtocol: 'HTTP'
+      HealthCheckPath: "/"
+      HealthCheckPort: "3000"
+      HealthCheckProtocol: "HTTP"
       HealthCheckTimeoutSeconds: 60
       HealthyThresholdCount: 2
       IpAddressType: ipv4
       Name: !Sub ${AWS::StackName}-lb-tg
       Port: 3000
-      Protocol: 'HTTP'
+      Protocol: "HTTP"
       Tags:
         - Key: Name
           Value: !Sub ${AWS::StackName}-lb-tg
       TargetGroupAttributes:
         - Key: deregistration_delay.timeout_seconds
-          Value: '20'
+          Value: "20"
       TargetType: instance
       UnhealthyThresholdCount: 2
       VpcId: !Ref myVPC
@@ -859,73 +858,61 @@ Resources:
           TargetGroupArn: !Ref myLBTargetGroup
       LoadBalancerArn: !Ref myLoadBalancer
       Port: 443
-      Protocol: HTTP  
-  #Create KMS Key for EBS Volume     
-  myEBSVolumeKmsKey:
-    Type: AWS::KMS::Key
-    Properties:
-      Description: !Sub KMS Key for EBS
-      KeyPolicy:
-        Version: 2012-10-17
-        Id: "kms-key-for-ebs"      
-        Statement:
-          - Sid: "Allow IAM User permission for EBS"
-            Effect: Allow
-            Principal:
-              AWS: !Join 
-                - ''
-                - - 'arn:aws:iam::'
-                  - !Ref 'AWS::AccountId'
-                  - ':root'
-            Action:
-              - "kms:*"
-            Resource: "*"
-          - Sid: "Add service role"
-            Effect: Allow
-            Principal:
-              AWS: !Join 
-                - ''
-                - - 'arn:aws:iam::'
-                  - !Ref 'AWS::AccountId'
-                  - ':role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling'
-            Action:
-              - "kms:*"
-            Resource: "*"  
-            Condition:
-              Bool: 
-                kms:GrantIsForAWSResource: true   
-  #Create KMS Key for RDS Instance  
+      Protocol: HTTP
+  # #Create KMS Key for EBS Volume
+  # myEBSVolumeKmsKey:
+  #   Type: AWS::KMS::Key
+  #   Properties:
+  #     Description: !Sub KMS Key for EBS
+  #     KeyPolicy:
+  #       Version: 2012-10-17
+  #       Id: "kms-key-for-ebs"
+  #       Statement:
+  #         - Sid: "Allow IAM User permission for EBS"
+  #           Effect: Allow
+  #           Principal:
+  #             AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+  #           Action:
+  #             - "kms:*"
+  #           Resource: "*"
+  #         - Sid: "Add service role"
+  #           Effect: Allow
+  #           Principal:
+  #             AWS: !Join
+  #               - ""
+  #               - - "arn:aws:iam::"
+  #                 - !Ref "AWS::AccountId"
+  #                 - ":role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+  #           Action:
+  #             - "kms:*"
+  #           Resource: "*"
+  #           Condition:
+  #             Bool:
+  #               kms:GrantIsForAWSResource: true
+  #Create KMS Key for RDS Instance
   myRDSInstanceKmsKey:
     Type: AWS::KMS::Key
     Properties:
       Description: !Sub KMS Key for RDS
       KeyPolicy:
         Version: 2012-10-17
-        Id: "kms-key-for-rds"      
+        Id: "kms-key-for-rds"
         Statement:
           - Sid: "Allow IAM User permission for RDS Instance"
             Effect: Allow
             Principal:
-              AWS: !Join 
-                - ''
-                - - 'arn:aws:iam::'
-                  - !Ref 'AWS::AccountId'
-                  - ':root'
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
             Action:
               - "kms:*"
             Resource: "*"
           - Sid: "Add service role"
             Effect: Allow
             Principal:
-              AWS: !Join 
-                - ''
-                - - 'arn:aws:iam::'
-                  - !Ref 'AWS::AccountId'
-                  - ':role/aws-service-role/rds.amazonaws.com/AWSServiceRoleForRDS'
+              AWS: !Join
+                - ""
+                - - "arn:aws:iam::"
+                  - !Ref "AWS::AccountId"
+                  - ":role/aws-service-role/rds.amazonaws.com/AWSServiceRoleForRDS"
             Action:
               - "kms:*"
-            Resource: "*"              
-   
-                     
-      
-      
+            Resource: "*"
