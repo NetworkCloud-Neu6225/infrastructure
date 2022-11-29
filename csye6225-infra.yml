@@ -333,40 +333,40 @@ Resources:
       StorageEncrypted: true
       KmsKeyId: !Ref myRDSInstanceKmsKey
   #Create EC2 instance
-  myEC2Instance:
-    Type: AWS::EC2::Instance
-    DependsOn:
-      - myRDSBBInstance
-    Properties:
-      ImageId: !Ref AMIID
-      InstanceType: t2.micro
-      KeyName: !Ref KeyPairName
-      IamInstanceProfile: !Ref myInstanceProfile
-      BlockDeviceMappings:
-        - DeviceName: /dev/sda1
-          Ebs:
-            VolumeType: gp2
-            VolumeSize: "50"
-            DeleteOnTermination: "true"
-            Encrypted: "true"
-      SecurityGroupIds:
-        - !Ref myWebAppSecurityGroup
-      SubnetId: !Ref mySubnet1
-      UserData:
-        Fn::Base64: !Sub |
-          #!/bin/bash
-          echo USERNAME=${MasterUsername} >> /home/ubuntu/app.env
-          echo PASSWORD=${MasterUserPassword} >> /home/ubuntu/app.env
-          echo S3BUCKETNAME=${S3BucketName}-${AWS::Region} >> /home/ubuntu/app.env
-          echo HOSTNAME=${myRDSBBInstance.Endpoint.Address} >> /home/ubuntu/app.env
-          echo REGION=${AWS::Region} >> /home/ubuntu/app.env
-          echo "Start Systemd"
-          sudo systemctl enable index.service
-          sudo systemctl start index.service 
-          sleep 20
-          echo "Reload Demon"
-          sudo systemctl daemon-reload  
-          sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-ports 3000
+  # myEC2Instance:
+  #   Type: AWS::EC2::Instance
+  #   DependsOn:
+  #     - myRDSBBInstance
+  #   Properties:
+  #     ImageId: !Ref AMIID
+  #     InstanceType: t2.micro
+  #     KeyName: !Ref KeyPairName
+  #     IamInstanceProfile: !Ref myInstanceProfile
+  #     BlockDeviceMappings:
+  #       - DeviceName: /dev/sda1
+  #         Ebs:
+  #           VolumeType: gp2
+  #           VolumeSize: "50"
+  #           DeleteOnTermination: "true"
+  #           Encrypted: "true"
+  #     SecurityGroupIds:
+  #       - !Ref myWebAppSecurityGroup
+  #     SubnetId: !Ref mySubnet1
+  #     UserData:
+  #       Fn::Base64: !Sub |
+  #         #!/bin/bash
+  #         echo USERNAME=${MasterUsername} >> /home/ubuntu/app.env
+  #         echo PASSWORD=${MasterUserPassword} >> /home/ubuntu/app.env
+  #         echo S3BUCKETNAME=${S3BucketName}-${AWS::Region} >> /home/ubuntu/app.env
+  #         echo HOSTNAME=${myRDSBBInstance.Endpoint.Address} >> /home/ubuntu/app.env
+  #         echo REGION=${AWS::Region} >> /home/ubuntu/app.env
+  #         echo "Start Systemd"
+  #         sudo systemctl enable index.service
+  #         sudo systemctl start index.service 
+  #         sleep 20
+  #         echo "Reload Demon"
+  #         sudo systemctl daemon-reload  
+  #         sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-ports 3000
   # Create S3 Bucket
   MyS3Bucket:
     Type: "AWS::S3::Bucket"
@@ -442,8 +442,8 @@ Resources:
   # Create S3 Policy
   myWebAppS3Policy:
     Type: AWS::IAM::Policy
-    DependsOn:
-      - myEC2Instance
+    # DependsOn:
+    #   - myEC2Instance
     Properties:
       PolicyName: WebAppS3
       PolicyDocument:
@@ -733,6 +733,9 @@ Resources:
             sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-ports 3000
   myAutoScalingGroupWebApp:
     Type: AWS::AutoScaling::AutoScalingGroup
+    DependsOn:
+      - myLaunchTemplate
+      - myLBTargetGroup
     Properties:
       AutoScalingGroupName: !Sub ${AWS::StackName}-asg
       AvailabilityZones:
@@ -916,3 +919,87 @@ Resources:
             Action:
               - "kms:*"
             Resource: "*"
+  #Create service role for codedeploy
+  myCDServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: CodeDeployServiceRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codedeploy.amazonaws.com
+            Action: 
+              - 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole
+        - arn:aws:iam::aws:policy/service-role/AWSCodeDeployRoleForLambda
+      Path: "/"         
+  myCodeDeployApplication: 
+    Type: AWS::CodeDeploy::Application 
+    Properties:
+      ComputePlatform: Server
+      ApplicationName: webapp
+  CodeDeployDeploymentGroup:
+    Type: AWS::CodeDeploy::DeploymentGroup
+    DependsOn: myCodeDeployApplication 
+    Properties:
+      DeploymentGroupName: webapp-deployement
+      ApplicationName: !Ref myCodeDeployApplication
+      AutoScalingGroups:
+        - Ref: myAutoScalingGroupWebApp
+      ServiceRoleArn: !GetAtt myCDServiceRole.Arn
+      DeploymentStyle:
+        DeploymentType: IN_PLACE
+        DeploymentOption: WITHOUT_TRAFFIC_CONTROL
+      DeploymentConfigName: CodeDeployDefault.AllAtOnce
+      AutoRollbackConfiguration:
+        Enabled: 'true'
+        Events: 
+          - DEPLOYMENT_FAILURE 
+  myCodeDeployInstanceS3:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: CodeDeploy-EC2-S3
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Action:
+            - 's3:GetObject'
+            - 's3:PutObject'
+          Resource:
+              - arn:aws:s3:::codedeploy.mys3bucketnew-us-east-1
+              - arn:aws:s3:::codedeploy.mys3bucketnew-us-east-1/*
+      Roles:
+        - !Ref myCDServiceRole  
+  myCodeDeployGithub:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: CodedeployGithub
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'codedeploy:RegisterApplicationRevision'
+              - 'codedeploy:GetApplicationRevision'
+            Resource: 
+              - !Join ["",["arn:aws:codedeploy:us-east-1:",!Ref "AWS::AccountId", ":application:",!Ref myCodeDeployApplication,],]
+          - Effect: Allow
+            Action:
+              - 'codedeploy:CreateDeployment'
+              - 'codedeploy:GetDeployment'
+            Resource:
+              - '*'
+          - Effect: Allow
+            Action:
+              - 'codedeploy:GetDeploymentConfig'
+            Resource:
+              - !Join ["",["arn:aws:codedeploy:us-east-1:",!Ref "AWS::AccountId", ":deploymentconfig:CodeDeployDefault.OneAtATime",],]
+              - !Join ["",["arn:aws:codedeploy:us-east-1:",!Ref "AWS::AccountId", ":deploymentconfig:CodeDeployDefault.HalfAtATime",],]
+              - !Join ["",["arn:aws:codedeploy:us-east-1:",!Ref "AWS::AccountId", ":deploymentconfig:CodeDeployDefault.AllAtOnce",],]               
+      Roles:
+        - !Ref myCDServiceRole         
