@@ -43,6 +43,10 @@ Parameters:
     Default: "mys3bucketnew"
     AllowedPattern: "^[a-z0-9]{5,40}$"
     ConstraintDescription: 3-63 characters; must contain only lowercase letters or numbers
+  Lambdafilename:
+    Description: Api Gateway Authorizer Lambda file Name (Latest)
+    Type: String  
+    Default: index.zip
   DBName:
     Type: String
     Description: RDS Database name
@@ -557,6 +561,7 @@ Resources:
         - arn:aws:iam::aws:policy/AWSLambdaExecute
         - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
         - arn:aws:iam::aws:policy/AmazonSESFullAccess
+        - arn:aws:iam::aws:policy/AmazonSNSFullAccess
       Path: /
   myLambdaFunction:
     Type: AWS::Lambda::Function
@@ -566,6 +571,12 @@ Resources:
       Description: LambdaFunctioni of nodejs16.x.
       PackageType: Zip
       Runtime: nodejs16.x
+      # Code:
+      #   S3Bucket: !Join
+      #   - "-"
+      #   - - !Ref S3BucketName
+      #     - !Ref "AWS::Region"
+      #   S3Key: !Sub '${Lambdafilename}.zip'
       Code:
         ZipFile: |
           const aws = require("aws-sdk");
@@ -919,87 +930,4 @@ Resources:
             Action:
               - "kms:*"
             Resource: "*"
-  #Create service role for codedeploy
-  myCDServiceRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: CodeDeployServiceRole
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-                - codedeploy.amazonaws.com
-            Action: 
-              - 'sts:AssumeRole'
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole
-        - arn:aws:iam::aws:policy/service-role/AWSCodeDeployRoleForLambda
-      Path: "/"         
-  myCodeDeployApplication: 
-    Type: AWS::CodeDeploy::Application 
-    Properties:
-      ComputePlatform: Server
-      ApplicationName: webapp
-  CodeDeployDeploymentGroup:
-    Type: AWS::CodeDeploy::DeploymentGroup
-    DependsOn: myCodeDeployApplication 
-    Properties:
-      DeploymentGroupName: webapp-deployement
-      ApplicationName: !Ref myCodeDeployApplication
-      AutoScalingGroups:
-        - Ref: myAutoScalingGroupWebApp
-      ServiceRoleArn: !GetAtt myCDServiceRole.Arn
-      DeploymentStyle:
-        DeploymentType: IN_PLACE
-        DeploymentOption: WITHOUT_TRAFFIC_CONTROL
-      DeploymentConfigName: CodeDeployDefault.AllAtOnce
-      AutoRollbackConfiguration:
-        Enabled: 'true'
-        Events: 
-          - DEPLOYMENT_FAILURE 
-  myCodeDeployInstanceS3:
-    Type: 'AWS::IAM::Policy'
-    Properties:
-      PolicyName: CodeDeploy-EC2-S3
-      PolicyDocument:
-        Version: 2012-10-17
-        Statement:
-        - Effect: Allow
-          Action:
-            - 's3:GetObject'
-            - 's3:PutObject'
-          Resource:
-              - arn:aws:s3:::codedeploy.mys3bucketnew-us-east-1
-              - arn:aws:s3:::codedeploy.mys3bucketnew-us-east-1/*
-      Roles:
-        - !Ref myCDServiceRole  
-  myCodeDeployGithub:
-    Type: AWS::IAM::Policy
-    Properties:
-      PolicyName: CodedeployGithub
-      PolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Action:
-              - 'codedeploy:RegisterApplicationRevision'
-              - 'codedeploy:GetApplicationRevision'
-            Resource: 
-              - !Join ["",["arn:aws:codedeploy:us-east-1:",!Ref "AWS::AccountId", ":application:",!Ref myCodeDeployApplication,],]
-          - Effect: Allow
-            Action:
-              - 'codedeploy:CreateDeployment'
-              - 'codedeploy:GetDeployment'
-            Resource:
-              - '*'
-          - Effect: Allow
-            Action:
-              - 'codedeploy:GetDeploymentConfig'
-            Resource:
-              - !Join ["",["arn:aws:codedeploy:us-east-1:",!Ref "AWS::AccountId", ":deploymentconfig:CodeDeployDefault.OneAtATime",],]
-              - !Join ["",["arn:aws:codedeploy:us-east-1:",!Ref "AWS::AccountId", ":deploymentconfig:CodeDeployDefault.HalfAtATime",],]
-              - !Join ["",["arn:aws:codedeploy:us-east-1:",!Ref "AWS::AccountId", ":deploymentconfig:CodeDeployDefault.AllAtOnce",],]               
-      Roles:
-        - !Ref myCDServiceRole         
+ 
