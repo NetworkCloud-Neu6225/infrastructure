@@ -47,6 +47,14 @@ Parameters:
     Description: Api Gateway Authorizer Lambda file Name (Latest)
     Type: String  
     Default: index.zip
+  EC2LaunchTemplateName:
+    Description: EC2 launch template Name
+    Type: String  
+    Default: EC2-launch-template
+  ASGroupName:
+    Description: Auto Scaling Group Name
+    Type: String  
+    Default: myVpcStack1-asg    
   DBName:
     Type: String
     Description: RDS Database name
@@ -75,6 +83,11 @@ Parameters:
     Default: ""
     Description: The subdomain of the DNS entry.
     Type: String
+  CertificateARN:
+    Default: arn:aws:acm:us-east-1:987729257471:certificate/3e53d90e-d974-4d4c-b62f-72a71b33bbad
+    Description: SSL certificate ARN.
+    Type: String
+    
 Resources:
   # Create a VPC
   myVPC:
@@ -707,7 +720,7 @@ Resources:
   myLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties:
-      LaunchTemplateName: "EC2-launch-template"
+      LaunchTemplateName: !Ref EC2LaunchTemplateName
       LaunchTemplateData:
         BlockDeviceMappings:
           - DeviceName: /dev/sda1
@@ -748,7 +761,7 @@ Resources:
       - myLaunchTemplate
       - myLBTargetGroup
     Properties:
-      AutoScalingGroupName: !Sub ${AWS::StackName}-asg
+      AutoScalingGroupName: !Ref ASGroupName
       AvailabilityZones:
         - us-east-1a
         - us-east-1b
@@ -767,7 +780,7 @@ Resources:
           Value: WebApp
           PropagateAtLaunch: "true"
         - Key: Name
-          Value: !Sub ${AWS::StackName}-asg
+          Value: !Ref ASGroupName
           PropagateAtLaunch: "true"
       TargetGroupARNs:
         - !Ref myLBTargetGroup
@@ -843,6 +856,7 @@ Resources:
           Value: !Sub ${AWS::StackName}-load-balancer
       Type: application
   myLBTargetGroup:
+    DependsOn: myLoadBalancer
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       HealthCheckIntervalSeconds: 90
@@ -872,7 +886,10 @@ Resources:
           TargetGroupArn: !Ref myLBTargetGroup
       LoadBalancerArn: !Ref myLoadBalancer
       Port: 443
-      Protocol: HTTP
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn:
+            Ref: CertificateARN
   # #Create KMS Key for EBS Volume
   # myEBSVolumeKmsKey:
   #   Type: AWS::KMS::Key
