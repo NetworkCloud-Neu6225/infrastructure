@@ -21,3 +21,7 @@
 * To delete a cloudformation stack run aws cli command
   
 	Delete stack - aws cloudformation delete-stack --stack-name "Stackname"
+
+## Command to import SSL certificate into AWS Certificate Manager
+
+   aws acm import-certificate --certificate fileb://Certificate.pem --private-key fileb://PrivateKey.pem
