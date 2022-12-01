@@ -707,7 +707,7 @@ Resources:
   myLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties:
-      LaunchTemplateName: !Sub "${AWS::StackName}-launch-template"
+      LaunchTemplateName: "EC2-launch-template"
       LaunchTemplateData:
         BlockDeviceMappings:
           - DeviceName: /dev/sda1
@@ -846,7 +846,7 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       HealthCheckIntervalSeconds: 90
-      HealthCheckPath: "/"
+      HealthCheckPath: "/healthz"
       HealthCheckPort: "3000"
       HealthCheckProtocol: "HTTP"
       HealthCheckTimeoutSeconds: 60
